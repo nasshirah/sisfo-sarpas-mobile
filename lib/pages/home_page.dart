@@ -19,7 +19,7 @@ class _HomePageState extends State<HomePage> {
   String? _token;
   String? _email;
   int? _userId;
-  int? _idPeminjaman; // Tambahan
+  // Remove _idPeminjaman if not needed, or keep it for other purposes
 
   List<Widget> _pages = [];
 
@@ -30,29 +30,27 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadUserData() async {
-  final prefs = await SharedPreferences.getInstance();
-  setState(() {
-    _token = prefs.getString('token');
-    _email = prefs.getString('user_name'); // <- ini juga harus cocok
-    _userId = prefs.getInt('user_id');
-    _idPeminjaman = prefs.getInt('idPeminjaman') ?? 0; // default to 0 if null
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _token = prefs.getString('token');
+      _email = prefs.getString('user_name');
+      _userId = prefs.getInt('user_id');
 
-    if (_token != null && _email != null && _userId != null) {
-      _pages = [
-        DataBarangPage(token: _token!),
-        PeminjamanFormPage(token: _token!, userId: _userId!),
-        PengembalianFormPage(token: _token!, idPeminjaman: _idPeminjaman!),
-        RiwayatPage(token: _token!),
-        ProfilPage(email: _email!),
-      ];
-    }
-  });
-}
-
+      if (_token != null && _email != null && _userId != null) {
+        _pages = [
+          DataBarangPage(token: _token!),
+          PeminjamanFormPage(token: _token!, userId: _userId!),
+          PengembalianFormPage(token: _token!, userId: _userId!), // Add required userId parameter
+          RiwayatPage(token: _token!),
+          ProfilPage(email: _email!),
+        ];
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_token == null || _email == null || _userId == null || _idPeminjaman == null) {
+    if (_token == null || _email == null || _userId == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -61,6 +59,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed, // Add this for 5+ items
         currentIndex: _currentIndex,
         selectedItemColor: Colors.indigo,
         unselectedItemColor: Colors.grey,

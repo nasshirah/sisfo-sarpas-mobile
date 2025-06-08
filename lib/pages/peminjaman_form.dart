@@ -27,9 +27,9 @@ class _PeminjamanFormPageState extends State<PeminjamanFormPage> {
   final TextEditingController _jumlahController = TextEditingController();
   final TextEditingController _tanggalPinjamController = TextEditingController();
   bool _isLoading = false;
+  int? _idPeminjaman;
 
   late final PeminjamanService _peminjamanService;
-
   int get _userId => widget.userId;
 
   @override
@@ -82,9 +82,9 @@ class _PeminjamanFormPageState extends State<PeminjamanFormPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Barang ${_selectedBarang?.namaBarang} berhasil dipinjam',
+                'ID: $_idPeminjaman\nBarang: ${_selectedBarang?.namaBarang}',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[600]),
+                style: TextStyle(color: Colors.grey[700]),
               ),
             ],
           ),
@@ -115,7 +115,8 @@ class _PeminjamanFormPageState extends State<PeminjamanFormPage> {
           jumlah: jumlahPinjam,
         );
 
-        // Simpan ke SharedPreferences
+        _idPeminjaman = peminjaman.id;
+
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('idPeminjaman', peminjaman.id);
         debugPrint('Saved idPeminjaman: ${peminjaman.id}');
@@ -162,6 +163,16 @@ class _PeminjamanFormPageState extends State<PeminjamanFormPage> {
       child: SingleChildScrollView(
         child: Column(
           children: [
+            if (_idPeminjaman != null) ...[
+              Container(
+                alignment: Alignment.centerLeft,
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'ID Peminjaman: $_idPeminjaman',
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                ),
+              ),
+            ],
             DropdownButtonFormField<Barang>(
               decoration: const InputDecoration(labelText: 'Pilih Barang', border: OutlineInputBorder()),
               items: _barangList.map((b) {
