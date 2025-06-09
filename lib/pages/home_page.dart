@@ -40,8 +40,10 @@ class _HomePageState extends State<HomePage> {
         _pages = [
           DataBarangPage(token: _token!),
           PeminjamanFormPage(token: _token!, userId: _userId!),
-          PengembalianFormPage(token: _token!, userId: _userId!), // Add required userId parameter
-          RiwayatPage(token: _token!),
+          PengembalianFormPage(
+              token: _token!,
+              userId: _userId!), // Add required userId parameter
+          RiwayatPage(token: _token!, userId: _userId!),
           ProfilPage(email: _email!),
         ];
       }

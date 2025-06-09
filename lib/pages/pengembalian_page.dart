@@ -19,14 +19,15 @@ class PengembalianFormPage extends StatefulWidget {
 
 class _PengembalianFormPageState extends State<PengembalianFormPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _tanggalKembaliController = TextEditingController();
+  final TextEditingController _tanggalKembaliController =
+      TextEditingController();
   final TextEditingController _keteranganController = TextEditingController();
-  
+
   List<Peminjaman> _peminjamanList = [];
   Peminjaman? _selectedPeminjaman;
   bool _isLoading = false;
   bool _isLoadingPeminjaman = true;
-  
+
   late final PeminjamanService _peminjamanService;
 
   @override
@@ -36,24 +37,55 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
     _loadUserPeminjaman();
   }
 
-  // Load peminjaman yang belum dikembalikan oleh user
+  // Load peminjaman yang belum dikembalikan dan belum diajukan pengembaliannya
   Future<void> _loadUserPeminjaman() async {
     try {
       setState(() => _isLoadingPeminjaman = true);
-      
-      // Asumsi ada method untuk fetch peminjaman user yang belum dikembalikan
-      List<Peminjaman> peminjamanList = await _peminjamanService.getPeminjamanByUserId(
+
+      // Fetch peminjaman user yang belum dikembalikan
+      List<Peminjaman> allPeminjamanList =
+          await _peminjamanService.getPeminjamanByUserId(
         userId: widget.userId,
         statusFilter: 'belum_kembali', // atau sesuai dengan status di backend
       );
-      
+
+      // Fetch daftar pengembalian yang sudah diajukan oleh user
+      List<Pengembalian> pengembalianList =
+          await _peminjamanService.fetchPengembalian(
+        userId: widget.userId,
+      );
+
+      // Buat set ID peminjaman yang sudah diajukan pengembaliannya
+      Set<int> peminjamanIdWithReturn = pengembalianList
+          .map((pengembalian) => pengembalian.idPeminjaman)
+          .toSet();
+
+      // Filter peminjaman yang belum diajukan pengembaliannya
+      List<Peminjaman> availablePeminjamanList = allPeminjamanList
+          .where(
+              (peminjaman) => !peminjamanIdWithReturn.contains(peminjaman.id))
+          .toList();
+
+      // Remove duplicates based on ID to prevent dropdown assertion error
+      Map<int, Peminjaman> uniquePeminjaman = {};
+      for (var peminjaman in availablePeminjamanList) {
+        uniquePeminjaman[peminjaman.id] = peminjaman;
+      }
+
       setState(() {
-        _peminjamanList = peminjamanList;
+        _peminjamanList = uniquePeminjaman.values.toList();
+        // Reset selected item if it's no longer in the list
+        if (_selectedPeminjaman != null &&
+            !_peminjamanList.any((p) => p.id == _selectedPeminjaman!.id)) {
+          _selectedPeminjaman = null;
+        }
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memuat daftar peminjaman: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat daftar peminjaman: $e')),
+        );
+      }
     } finally {
       setState(() => _isLoadingPeminjaman = false);
     }
@@ -70,24 +102,43 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
     setState(() => _isLoading = true);
 
     try {
+      // Store the selected peminjaman info for success dialog
+      final submittedPeminjaman = _selectedPeminjaman!;
+
       // Create pengembalian (status akan diisi oleh admin)
       await _peminjamanService.createPengembalian(
-        idPeminjaman: _selectedPeminjaman!.id,
+        idPeminjaman: submittedPeminjaman.id,
         tanggalKembali: _tanggalKembaliController.text,
-        keterangan: _keteranganController.text.isEmpty ? null : _keteranganController.text,
+        keterangan: _keteranganController.text.isEmpty
+            ? null
+            : _keteranganController.text,
       );
 
-      _showSuccessAlert();
+      // Clear form and selected item immediately after successful submission
+      _tanggalKembaliController.clear();
+      _keteranganController.clear();
+
+      setState(() {
+        _selectedPeminjaman = null;
+        _isLoading = false;
+      });
+
+      // Refresh the list to remove the submitted item from dropdown
+      await _loadUserPeminjaman();
+
+      // Show success dialog with stored info
+      _showSuccessAlert(submittedPeminjaman);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengajukan pengembalian: $e')),
-      );
-    } finally {
       setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengajukan pengembalian: $e')),
+        );
+      }
     }
   }
 
-  void _showSuccessAlert() {
+  void _showSuccessAlert(Peminjaman submittedPeminjaman) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -104,11 +155,13 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
         });
 
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_outline, color: Colors.green, size: 64),
+              const Icon(Icons.check_circle_outline,
+                  color: Colors.green, size: 64),
               const SizedBox(height: 16),
               const Text(
                 'Pengajuan Pengembalian Berhasil!',
@@ -117,7 +170,7 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'ID Peminjaman: ${_selectedPeminjaman?.id}\nBarang: ${_selectedPeminjaman?.barang?.namaBarang}\n\nMenunggu persetujuan admin',
+                'ID Peminjaman: ${submittedPeminjaman.id}\nBarang: ${submittedPeminjaman.barang?.namaBarang}\n\nMenunggu persetujuan admin',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[700]),
               ),
@@ -129,15 +182,21 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
   }
 
   Future<bool> _onWillPop() async {
-    if (_tanggalKembaliController.text.isNotEmpty || _keteranganController.text.isNotEmpty) {
+    if (_tanggalKembaliController.text.isNotEmpty ||
+        _keteranganController.text.isNotEmpty) {
       return await showDialog(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Keluar?'),
-              content: const Text('Data pengembalian belum disimpan. Yakin ingin keluar?'),
+              content: const Text(
+                  'Data pengembalian belum disimpan. Yakin ingin keluar?'),
               actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Batal')),
-                TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Keluar')),
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Batal')),
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Keluar')),
               ],
             ),
           ) ??
@@ -167,7 +226,11 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
                 border: OutlineInputBorder(),
                 helperText: 'Pilih peminjaman yang ingin dikembalikan',
               ),
-              value: _selectedPeminjaman,
+              value: _selectedPeminjaman != null &&
+                      _peminjamanList
+                          .any((p) => p.id == _selectedPeminjaman!.id)
+                  ? _selectedPeminjaman
+                  : null,
               items: _peminjamanList.map((peminjaman) {
                 return DropdownMenuItem<Peminjaman>(
                   value: peminjaman,
@@ -195,9 +258,10 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
                   _selectedPeminjaman = value;
                 });
               },
-              validator: (value) => value == null ? 'Harap pilih peminjaman' : null,
+              validator: (value) =>
+                  value == null ? 'Harap pilih peminjaman' : null,
             ),
-            
+
             const SizedBox(height: 16),
 
             // Info Detail Peminjaman yang dipilih
@@ -223,10 +287,12 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
                     ),
                     const SizedBox(height: 8),
                     Text('ID Peminjaman: ${_selectedPeminjaman!.id}'),
-                    Text('Barang: ${_selectedPeminjaman!.barang?.namaBarang ?? "N/A"}'),
+                    Text(
+                        'Barang: ${_selectedPeminjaman!.barang?.namaBarang ?? "N/A"}'),
                     Text('Jumlah Dipinjam: ${_selectedPeminjaman!.jumlah}'),
-                    Text('Tanggal Pinjam: ${_selectedPeminjaman!.tanggalPinjam}'),
-                    Text('Status: ${_selectedPeminjaman!.status ?? "N/A"}'),
+                    Text(
+                        'Tanggal Pinjam: ${_selectedPeminjaman!.tanggalPinjam}'),
+                    Text('Status: ${_selectedPeminjaman!.status}'),
                   ],
                 ),
               ),
@@ -255,13 +321,15 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
                   _tanggalKembaliController.text = formattedDate;
                 }
               },
-              validator: (val) => val == null || val.isEmpty ? 'Tanggal kembali harus diisi' : null,
+              validator: (val) => val == null || val.isEmpty
+                  ? 'Tanggal kembali harus diisi'
+                  : null,
             ),
 
             const SizedBox(height: 16),
 
             // Input Keterangan
-                          TextFormField(
+            TextFormField(
               controller: _keteranganController,
               decoration: const InputDecoration(
                 labelText: 'Keterangan (Opsional)',
@@ -326,8 +394,15 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldPop = await _onWillPop();
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Form Pengembalian'),
@@ -342,11 +417,18 @@ class _PengembalianFormPageState extends State<PengembalianFormPage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
+                          Icon(Icons.inbox_outlined,
+                              size: 64, color: Colors.grey),
                           SizedBox(height: 16),
                           Text(
                             'Tidak ada peminjaman yang perlu dikembalikan',
                             style: TextStyle(fontSize: 16, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Semua peminjaman sudah dikembalikan atau sedang dalam proses pengembalian',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
                             textAlign: TextAlign.center,
                           ),
                         ],
